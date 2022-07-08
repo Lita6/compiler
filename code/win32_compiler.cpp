@@ -131,60 +131,60 @@ WinMainCRTStartup
     GetSystemInfo(&SysInfo);
     Assert(SysInfo.dwPageSize != 0);
     u32 PAGE = SysInfo.dwPageSize;
-    (void)PAGE;
     
     Buffer buffer_strings = create_buffer(PAGE, PAGE_READWRITE);
     
+    /*
     read_file_result Test_EXE = Win32ReadEntireFile("..\\misc\\blank.exe");
     
     win32_file_header win32Header = {};
     win32Header.DOSHeader = (dos_header *)Test_EXE.Contents;
     
-    Buffer buffer_DOSData = create_buffer(PAGE, PAGE_READWRITE);
-    String intro = create_string(&buffer_DOSData, "global u8 DOSHeaderData[] = {\r\n");
-    
-    for(u8 *data = (u8 *)Test_EXE.Contents; data < ((u8 *)Test_EXE.Contents + win32Header.DOSHeader->e_lfanew + 4); data++)
-    {
+        Buffer buffer_DOSData = create_buffer(PAGE, PAGE_READWRITE);
+        String intro = create_string(&buffer_DOSData, "global u8 DOSHeaderData[] = {\r\n");
         
-        buffer_append_u8(&buffer_DOSData, '0');
-        buffer_append_u8(&buffer_DOSData, 'x');
+        for(u8 *data = (u8 *)Test_EXE.Contents; data < ((u8 *)Test_EXE.Contents + win32Header.DOSHeader->e_lfanew + 4); data++)
+        {
+            
+            buffer_append_u8(&buffer_DOSData, '0');
+            buffer_append_u8(&buffer_DOSData, 'x');
+            
+            u8 high = (u8)(((*data & 0xf0) >> 4) & 0x0f);
+            if(high <= 9)
+            {
+                high += '0';
+            }
+            else
+            {
+                high = (u8)(high - 10 + 'A');
+            }
+            
+            u8 low = (u8)(*data & 0x0f);
+            if(low <= 9)
+            {
+                low += '0';
+            }
+            else
+            {
+                low = (u8)(low - 10 + 'A');
+            }
+            
+            buffer_append_u8(&buffer_DOSData, high);
+            buffer_append_u8(&buffer_DOSData, low);
+            buffer_append_u8(&buffer_DOSData, ',');
+            buffer_append_u8(&buffer_DOSData, ' ');
+        }
         
-        u8 high = (u8)(((*data & 0xf0) >> 4) & 0x0f);
-        if(high <= 9)
-        {
-            high += '0';
-        }
-        else
-        {
-            high = (u8)(high - 10 + 'A');
-        }
+        buffer_DOSData.end -= 2;
+        buffer_DOSData.size -= 2;
+        buffer_append_u8(&buffer_DOSData, '\r');
+        buffer_append_u8(&buffer_DOSData, '\n');
+        buffer_append_u8(&buffer_DOSData, '}');
+        buffer_append_u8(&buffer_DOSData, ';');
         
-        u8 low = (u8)(*data & 0x0f);
-        if(low <= 9)
-        {
-            low += '0';
-        }
-        else
-        {
-            low = (u8)(low - 10 + 'A');
-        }
-        
-        buffer_append_u8(&buffer_DOSData, high);
-        buffer_append_u8(&buffer_DOSData, low);
-        buffer_append_u8(&buffer_DOSData, ',');
-        buffer_append_u8(&buffer_DOSData, ' ');
-    }
-    
-    buffer_DOSData.end -= 2;
-    buffer_DOSData.size -= 2;
-    buffer_append_u8(&buffer_DOSData, '\r');
-    buffer_append_u8(&buffer_DOSData, '\n');
-    buffer_append_u8(&buffer_DOSData, '}');
-    buffer_append_u8(&buffer_DOSData, ';');
-    
-    u32 Size = (u32)(buffer_DOSData.end - buffer_DOSData.memory);
-    b32 written = win32WriteEntireFile("..\\misc\\temp.txt", Size, buffer_DOSData.memory);
-    (void)written;
+        u32 Size = (u32)(buffer_DOSData.end - buffer_DOSData.memory);
+        b32 written = win32WriteEntireFile("..\\misc\\temp.txt", Size, buffer_DOSData.memory);
+        (void)written;
     
     win32Header.COFFHeader = (coff_header *)((u8 *)Test_EXE.Contents + win32Header.DOSHeader->e_lfanew + 4);
     win32Header.PEOptHeader = (pe_opt_header *)((u8 *)win32Header.COFFHeader + sizeof(coff_header));
@@ -220,6 +220,79 @@ WinMainCRTStartup
     
 	u8 *MainFunction = win32Header.PEOptHeader->AddressOfEntryPoint - win32Header.PEOptHeader->BaseOfCode + TextStart;
     (void)MainFunction;
+    */
+    
+    Buffer executable = create_buffer(PAGE, PAGE_READWRITE);
+    u32 BytesToWrite = ArrayCount(DOSHeaderData);
+    for(u32 i = 0; i < BytesToWrite; i++)
+    {
+        buffer_append_u8(&executable, DOSHeaderData[i]);
+    }
+    
+    coff_header *COFFHeader = (coff_header *)buffer_allocate(&executable, sizeof(coff_header));
+    COFFHeader->machine = 0x8664;
+    COFFHeader->numberOfSections = 1;
+    
+    FILETIME filetime = {};
+    GetSystemTimePreciseAsFileTime(&filetime);
+    COFFHeader->timeDateStamp = filetime.dwLowDateTime;
+    COFFHeader->sizeOfOptionalHeader = sizeof(pe_opt_header) + sizeof(coff_extension) + (sizeof(data_directory) * 16);
+    COFFHeader->characteristics = IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE;
+    
+    pe_opt_header *PEOptHeader = (pe_opt_header *)buffer_allocate(&executable, sizeof(pe_opt_header));
+    PEOptHeader->PESignature = 0x20b;
+    PEOptHeader->SizeOfCode = 0x200;
+    PEOptHeader->AddressOfEntryPoint = PAGE;
+    PEOptHeader->BaseOfCode = PAGE;
+    
+    coff_extension *COFFExtension = (coff_extension *)buffer_allocate(&executable, sizeof(coff_extension));
+    COFFExtension->ImageBase = 0x400000;
+    COFFExtension->SectionAlignment = PAGE;
+    COFFExtension->FileAlignment = 0x200;
+    COFFExtension->MajorOSVersion = 6;
+    COFFExtension->MajorSubsystemVersion = 6;
+    COFFExtension->SizeOfImage = /* The header gets its own page.*/(1 + COFFHeader->numberOfSections) * COFFExtension->SectionAlignment;
+    COFFExtension->SizeOfHeaders = COFFExtension->FileAlignment;
+    COFFExtension->Subsystem = IMAGE_SUBSYSTEM_WINDOWS_GUI;
+    COFFExtension->DLLCharacteristics = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE | IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE | IMAGE_DLLCHARACTERISTICS_NX_COMPAT | IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA;
+    COFFExtension->SizeOfStackReserve = 0x100000;
+    COFFExtension->SizeOfStackCommit = 0x100000;
+    COFFExtension->SizeOfHeapReserve = PAGE;
+    COFFExtension->SizeOfHeapCommit = PAGE;
+    COFFExtension->NumberOfRvaAndSizes = 16;
+    data_directory *DataDirectory = (data_directory *)buffer_allocate(&executable, sizeof(data_directory)*16);
+    (void)DataDirectory;
+    
+    image_section_header *SectionHeader = (image_section_header *)buffer_allocate(&executable, sizeof(image_section_header));
+    SectionHeader->Name[0] = '.';
+    SectionHeader->Name[1] = 't';
+    SectionHeader->Name[2] = 'e';
+    SectionHeader->Name[3] = 'x';
+    SectionHeader->Name[4] = 't';
+    SectionHeader->VirtualAddress = PAGE;
+    SectionHeader->SizeOfRawData = COFFExtension->FileAlignment;
+    SectionHeader->PointerToRawData = COFFExtension->FileAlignment;
+    SectionHeader->Characteristics = IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ;
+    
+    executable.end = executable.memory + 0x200;
+    u32 code_bytes = 0;
+    buffer_append_u8(&executable, 0xb8);
+    code_bytes++;
+    buffer_append_u8(&executable, 0x01);
+    code_bytes++;
+    buffer_append_u8(&executable, 0x00);
+    code_bytes++;
+    buffer_append_u8(&executable, 0x00);
+    code_bytes++;
+    buffer_append_u8(&executable, 0x00);
+    code_bytes++;
+    buffer_append_u8(&executable, 0xc3);
+    code_bytes++;
+    
+    SectionHeader->Misc.VirtualSize = code_bytes;
+    
+    u32 Size = (/*for the header*/1 + COFFHeader->numberOfSections) * COFFExtension->FileAlignment;
+    win32WriteEntireFile("..\\misc\\MyProgram.exe", Size, executable.memory);
     
     return(0);
 }
