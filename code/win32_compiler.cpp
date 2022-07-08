@@ -133,10 +133,59 @@ WinMainCRTStartup
     u32 PAGE = SysInfo.dwPageSize;
     (void)PAGE;
     
+    Buffer buffer_strings = create_buffer(PAGE, PAGE_READWRITE);
+    
     read_file_result Test_EXE = Win32ReadEntireFile("..\\misc\\blank.exe");
     
     win32_file_header win32Header = {};
     win32Header.DOSHeader = (dos_header *)Test_EXE.Contents;
+    
+    Buffer buffer_DOSData = create_buffer(PAGE, PAGE_READWRITE);
+    String intro = create_string(&buffer_DOSData, "global u8 DOSHeaderData[] = {\r\n");
+    
+    for(u8 *data = (u8 *)Test_EXE.Contents; data < ((u8 *)Test_EXE.Contents + win32Header.DOSHeader->e_lfanew + 4); data++)
+    {
+        
+        buffer_append_u8(&buffer_DOSData, '0');
+        buffer_append_u8(&buffer_DOSData, 'x');
+        
+        u8 high = (u8)(((*data & 0xf0) >> 4) & 0x0f);
+        if(high <= 9)
+        {
+            high += '0';
+        }
+        else
+        {
+            high = (u8)(high - 10 + 'A');
+        }
+        
+        u8 low = (u8)(*data & 0x0f);
+        if(low <= 9)
+        {
+            low += '0';
+        }
+        else
+        {
+            low = (u8)(low - 10 + 'A');
+        }
+        
+        buffer_append_u8(&buffer_DOSData, high);
+        buffer_append_u8(&buffer_DOSData, low);
+        buffer_append_u8(&buffer_DOSData, ',');
+        buffer_append_u8(&buffer_DOSData, ' ');
+    }
+    
+    buffer_DOSData.end -= 2;
+    buffer_DOSData.size -= 2;
+    buffer_append_u8(&buffer_DOSData, '\r');
+    buffer_append_u8(&buffer_DOSData, '\n');
+    buffer_append_u8(&buffer_DOSData, '}');
+    buffer_append_u8(&buffer_DOSData, ';');
+    
+    u32 Size = (u32)(buffer_DOSData.end - buffer_DOSData.memory);
+    b32 written = win32WriteEntireFile("..\\misc\\temp.txt", Size, buffer_DOSData.memory);
+    (void)written;
+    
     win32Header.COFFHeader = (coff_header *)((u8 *)Test_EXE.Contents + win32Header.DOSHeader->e_lfanew + 4);
     win32Header.PEOptHeader = (pe_opt_header *)((u8 *)win32Header.COFFHeader + sizeof(coff_header));
     
@@ -169,8 +218,7 @@ WinMainCRTStartup
     
     u8 *TextStart = win32Header.SectionHeader[TEXT].PointerToRawData + (u8 *)Test_EXE.Contents;
     
-	// NOTE: AddressOfEntryPoint is relative to the image base when this file is loaded into memory. VirtualAddress is also relative to the image base when it's loaded into memory, so the difference will, hopefully, point straight to Main.
-	u8 *MainFunction = win32Header.PEOptHeader->AddressOfEntryPoint - win32Header.SectionHeader[TEXT].VirtualAddress + TextStart;
+	u8 *MainFunction = win32Header.PEOptHeader->AddressOfEntryPoint - win32Header.PEOptHeader->BaseOfCode + TextStart;
     (void)MainFunction;
     
     return(0);
