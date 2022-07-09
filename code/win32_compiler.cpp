@@ -1,3 +1,5 @@
+// TODO: How do I want to do testing?
+
 #include <windows.h>
 
 #include "win32_compiler.h"
@@ -10,6 +12,7 @@ struct data_directory
 };
 #pragma pack(pop)
 
+/*
 #pragma pack(push, 1)
 struct dos_header
 {
@@ -34,6 +37,7 @@ struct dos_header
     u32 e_lfanew;
 };
 #pragma pack(pop)
+*/
 
 #pragma pack(push, 1)
 struct coff_header
@@ -108,19 +112,142 @@ struct image_section_header
 };
 #pragma pack(pop)
 
+/*
 struct win32_file_header
 {
-    dos_header *DOSHeader;
-    coff_header *COFFHeader;
-    pe_opt_header *PEOptHeader;
-    
-    b32 use32bit;
-    u32 BaseOfData; // If the file is 32 bit, then this gets used and takes up space.
-    
-    coff_extension *COFFExtension;
-    data_directory *dataDirectory;
-    image_section_header *SectionHeader;
+   dos_header *DOSHeader;
+   coff_header *COFFHeader;
+   pe_opt_header *PEOptHeader;
+   
+   b32 use32bit;
+   u32 BaseOfData; // If the file is 32 bit, then this gets used and takes up space.
+   
+   coff_extension *COFFExtension;
+   data_directory *dataDirectory;
+   image_section_header *SectionHeader;
 };
+*/
+
+b32
+isAlpha
+(u8 ch)
+{
+    b32 Result = 0;
+    if(((ch >= 'A') && (ch <= 'Z')) ||
+       ((ch >= 'a') && (ch <= 'z')))
+    {
+        Result = 1;
+    }
+    
+    return(Result);
+}
+
+b32
+isDigit
+(u8 ch)
+{
+    b32 Result = 0;
+    if((ch >= '0') && (ch <= '9'))
+    {
+        Result = 1;
+    }
+    
+    return(Result);
+}
+
+u8 *
+GetChar
+(u8 *ch, u8 *chMax)
+{
+    
+    ch++;
+    if(ch >= chMax)
+    {
+        ch = 0;
+    }
+    return(ch);
+}
+
+void
+Term
+(Buffer *buffer, u8 *ch)
+{
+    u32 num = 0;
+    if(isDigit(*ch))
+    {
+        num = (u32)((s32)(*ch) - '0');
+        
+        // mov eax, imm32
+        buffer_append_u8(buffer, 0xb8);
+        buffer_append_u32(buffer, num);
+    }
+    else
+    {
+        Assert(!"Only a single digit number accepted for now.");
+    }
+}
+
+void
+Add
+(Buffer *buffer, u8 *ch)
+{
+    Term(buffer, ch);
+    
+    // add eax, ecx
+    buffer_append_u8(buffer, 0x01);
+    buffer_append_u8(buffer, 0xc8);
+}
+
+void
+Sub
+(Buffer *buffer, u8 *ch)
+{
+    Term(buffer, ch);
+    
+    // sub eax, ecx
+    buffer_append_u8(buffer, 0x29);
+    buffer_append_u8(buffer, 0xc8);
+    
+    // neg eax
+    buffer_append_u8(buffer, 0xf7);
+    buffer_append_u8(buffer, 0xd8);
+}
+
+void
+Expression
+(Buffer *buffer, u8 *ch, u8 *chMax)
+{
+    Term(buffer, ch);
+    ch = GetChar(ch, chMax);
+    
+    if(ch != 0)
+    {    
+        // mov ecx, eax
+        buffer_append_u8(buffer, 0x89);
+        buffer_append_u8(buffer, 0xc1);
+        
+        u8 c = *ch;
+        ch = GetChar(ch, chMax);
+        
+        switch(c)
+        {
+            case '+':
+            {
+                Add(buffer, ch);
+            }break;
+            
+            case '-':
+            {
+                Sub(buffer, ch);
+            }break;
+            
+            default:
+            {
+                Assert(!"Unsupported operation.");
+            };
+        }
+    }
+}
 
 int __stdcall
 WinMainCRTStartup
@@ -135,7 +262,7 @@ WinMainCRTStartup
     Buffer buffer_strings = create_buffer(PAGE, PAGE_READWRITE);
     
     /*
-    read_file_result Test_EXE = Win32ReadEntireFile("..\\misc\\blank.exe");
+    read_file_result Test_EXE = win32ReadEntireFile("..\\misc\\blank.exe");
     
     win32_file_header win32Header = {};
     win32Header.DOSHeader = (dos_header *)Test_EXE.Contents;
@@ -274,25 +401,20 @@ WinMainCRTStartup
     SectionHeader->PointerToRawData = COFFExtension->FileAlignment;
     SectionHeader->Characteristics = IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ;
     
-    executable.end = executable.memory + 0x200;
-    u32 code_bytes = 0;
-    buffer_append_u8(&executable, 0xb8);
-    code_bytes++;
-    buffer_append_u8(&executable, 0x01);
-    code_bytes++;
-    buffer_append_u8(&executable, 0x00);
-    code_bytes++;
-    buffer_append_u8(&executable, 0x00);
-    code_bytes++;
-    buffer_append_u8(&executable, 0x00);
-    code_bytes++;
-    buffer_append_u8(&executable, 0xc3);
-    code_bytes++;
+    void *codeStart = executable.end = executable.memory + 0x200;
     
-    SectionHeader->Misc.VirtualSize = code_bytes;
+    read_file_result sourceCode = win32ReadEntireFile("..\\data\\source.txt");
+    u8 *ch = (u8 *)sourceCode.Contents;
+    u8 *chMax = (u8 *)sourceCode.Contents + sourceCode.ContentsSize;
+    Expression(&executable, ch, chMax);
+    
+    // ret
+    buffer_append_u8(&executable, 0xc3);
+    
+    SectionHeader->Misc.VirtualSize = (u32)((u8 *)executable.end - (u8 *)codeStart);
     
     u32 Size = (/*for the header*/1 + COFFHeader->numberOfSections) * COFFExtension->FileAlignment;
-    win32WriteEntireFile("..\\misc\\MyProgram.exe", Size, executable.memory);
+    win32WriteEntireFile("..\\data\\MyProgram.exe", Size, executable.memory);
     
     return(0);
 }

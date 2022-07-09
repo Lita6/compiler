@@ -138,7 +138,7 @@ Win32FreeMemory
 }
 
 read_file_result
-Win32ReadEntireFile
+win32ReadEntireFile
 (char *FileName)
 {
     read_file_result Result = {};
