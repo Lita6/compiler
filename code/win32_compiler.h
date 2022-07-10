@@ -89,6 +89,10 @@ define_buffer_append(u32)
 define_buffer_append(u64)
 #undef define_buffer_append
 
+typedef void (*fn_void_to_void)();
+typedef u32 (*fn_void_to_u32)();
+typedef s32 (*fn_void_to_s32)();
+
 struct String
 {
     u8 *chars;
@@ -216,5 +220,75 @@ win32WriteEntireFile
 global u8 DOSHeaderData[] = {
     0x4D, 0x5A, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xA8, 0x00, 0x00, 0x00, 0x0E, 0x1F, 0xBA, 0x0E, 0x00, 0xB4, 0x09, 0xCD, 0x21, 0xB8, 0x01, 0x4C, 0xCD, 0x21, 0x54, 0x68, 0x69, 0x73, 0x20, 0x70, 0x72, 0x6F, 0x67, 0x72, 0x61, 0x6D, 0x20, 0x63, 0x61, 0x6E, 0x6E, 0x6F, 0x74, 0x20, 0x62, 0x65, 0x20, 0x72, 0x75, 0x6E, 0x20, 0x69, 0x6E, 0x20, 0x44, 0x4F, 0x53, 0x20, 0x6D, 0x6F, 0x64, 0x65, 0x2E, 0x0D, 0x0D, 0x0A, 0x24, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x61, 0x6A, 0x31, 0xDF, 0x25, 0x0B, 0x5F, 0x8C, 0x25, 0x0B, 0x5F, 0x8C, 0x25, 0x0B, 0x5F, 0x8C, 0xE4, 0x7E, 0x5A, 0x8D, 0x24, 0x0B, 0x5F, 0x8C, 0xE4, 0x7E, 0x5D, 0x8D, 0x24, 0x0B, 0x5F, 0x8C, 0x52, 0x69, 0x63, 0x68, 0x25, 0x0B, 0x5F, 0x8C, 0x50, 0x45, 0x00, 0x00
 };
+
+/*
+
+    Buffer executable = create_buffer(PAGE, PAGE_READWRITE);
+    u32 BytesToWrite = ArrayCount(DOSHeaderData);
+    for(u32 i = 0; i < BytesToWrite; i++)
+    {
+        buffer_append_u8(&executable, DOSHeaderData[i]);
+    }
+    
+    coff_header *COFFHeader = (coff_header *)buffer_allocate(&executable, sizeof(coff_header));
+    COFFHeader->machine = 0x8664;
+    COFFHeader->numberOfSections = 1;
+    
+    FILETIME filetime = {};
+    GetSystemTimePreciseAsFileTime(&filetime);
+    COFFHeader->timeDateStamp = filetime.dwLowDateTime;
+    COFFHeader->sizeOfOptionalHeader = sizeof(pe_opt_header) + sizeof(coff_extension) + (sizeof(data_directory) * 16);
+    COFFHeader->characteristics = IMAGE_FILE_EXECUTABLE_IMAGE | IMAGE_FILE_LARGE_ADDRESS_AWARE;
+    
+    pe_opt_header *PEOptHeader = (pe_opt_header *)buffer_allocate(&executable, sizeof(pe_opt_header));
+    PEOptHeader->PESignature = 0x20b;
+    PEOptHeader->SizeOfCode = 0x200;
+    PEOptHeader->AddressOfEntryPoint = PAGE;
+    PEOptHeader->BaseOfCode = PAGE;
+    
+    coff_extension *COFFExtension = (coff_extension *)buffer_allocate(&executable, sizeof(coff_extension));
+    COFFExtension->ImageBase = 0x400000;
+    COFFExtension->SectionAlignment = PAGE;
+    COFFExtension->FileAlignment = 0x200;
+    COFFExtension->MajorOSVersion = 6;
+    COFFExtension->MajorSubsystemVersion = 6;
+    COFFExtension->SizeOfImage = /*The header gets its own page.(1 + COFFHeader->numberOfSections) * COFFExtension->SectionAlignment;
+COFFExtension->SizeOfHeaders = COFFExtension->FileAlignment;
+COFFExtension->Subsystem = IMAGE_SUBSYSTEM_WINDOWS_GUI;
+COFFExtension->DLLCharacteristics = IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE | IMAGE_DLLCHARACTERISTICS_TERMINAL_SERVER_AWARE | IMAGE_DLLCHARACTERISTICS_NX_COMPAT | IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA;
+COFFExtension->SizeOfStackReserve = 0x100000;
+COFFExtension->SizeOfStackCommit = 0x100000;
+COFFExtension->SizeOfHeapReserve = PAGE;
+COFFExtension->SizeOfHeapCommit = PAGE;
+COFFExtension->NumberOfRvaAndSizes = 16;
+data_directory *DataDirectory = (data_directory *)buffer_allocate(&executable, sizeof(data_directory)*16);
+(void)DataDirectory;
+
+image_section_header *SectionHeader = (image_section_header *)buffer_allocate(&executable, sizeof(image_section_header));
+SectionHeader->Name[0] = '.';
+SectionHeader->Name[1] = 't';
+SectionHeader->Name[2] = 'e';
+SectionHeader->Name[3] = 'x';
+SectionHeader->Name[4] = 't';
+SectionHeader->VirtualAddress = PAGE;
+SectionHeader->SizeOfRawData = COFFExtension->FileAlignment;
+SectionHeader->PointerToRawData = COFFExtension->FileAlignment;
+SectionHeader->Characteristics = IMAGE_SCN_CNT_CODE | IMAGE_SCN_MEM_EXECUTE | IMAGE_SCN_MEM_READ;
+
+void *codeStart = executable.end = executable.memory + 0x200;
+
+read_file_result sourceCode = win32ReadEntireFile("..\\data\\source.txt");
+u8 *ch = (u8 *)sourceCode.Contents;
+u8 *chMax = (u8 *)sourceCode.Contents + sourceCode.ContentsSize;
+Expression(&executable, ch, chMax);
+
+// ret
+buffer_append_u8(&executable, 0xc3);
+
+SectionHeader->Misc.VirtualSize = (u32)((u8 *)executable.end - (u8 *)codeStart);
+
+u32 Size = (/*for the header1 + COFFHeader->numberOfSections) * COFFExtension->FileAlignment;
+win32WriteEntireFile("..\\data\\MyProgram.exe", Size, executable.memory);
+*/
 
 #endif //WIN32_COMPILER_H
