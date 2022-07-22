@@ -160,8 +160,19 @@ begin
    end;
 end;
 
+procedure Assignment;
+var Name: char;
+begin
+   Name := GetName;
+   Match('=');
+   Expression;
+   EmitLn('LEA ' + Name + '(PC),A0');
+   EmitLn('MOVE D0,(A0)')
+end;
+
 { Main Program }
 begin
    Init;
-   Expression;
+   Assignment;
+   if Look <> CR then Expected('Newline');
 end.

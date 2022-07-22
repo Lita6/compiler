@@ -67,6 +67,21 @@ stackPop
     info->stackCurrent -= sizeof(u64);
 }
 
+void
+GetChar
+(Program_Info *info)
+{
+    
+    if(info->ch != 0)
+    {    
+        info->ch++;
+        if(info->ch >= info->chMax)
+        {
+            info->ch = 0;
+        }
+    }
+}
+
 b32
 isAlpha
 (u8 ch)
@@ -92,21 +107,6 @@ isDigit
     }
     
     return(Result);
-}
-
-void
-GetChar
-(Program_Info *info)
-{
-    
-    if(info->ch != 0)
-    {    
-        info->ch++;
-        if(info->ch >= info->chMax)
-        {
-            info->ch = 0;
-        }
-    }
 }
 
 Variable *
@@ -149,6 +149,7 @@ Ident
         GetChar(info);
         if((info->ch != 0) && (*info->ch == ')'))
         {
+            GetChar(info);
             Assert(!"Not accepting function calls at the moment.");
             
             /*
@@ -207,6 +208,7 @@ Factor
         {
             Assert(!"Closing parenthesis expected.");
         }
+        GetChar(info);
     }
     else
     {
@@ -219,6 +221,8 @@ Factor
             buffer_append_u8(info->buffer, 0x48);
             buffer_append_u8(info->buffer, 0xb8);
             buffer_append_u64(info->buffer, num);
+            
+            GetChar(info);
         }
         else if((info->ch != 0) && (isAlpha(*info->ch)))
         {
@@ -235,6 +239,7 @@ void
 Multiply
 (Program_Info *info)
 {
+    GetChar(info);
     Factor(info);
     
     // mov rcx, qword ptr[rsp + info->stackCurrent]
@@ -257,6 +262,7 @@ void
 Divide
 (Program_Info *info)
 {
+    GetChar(info);
     Factor(info);
     
     // xor edx, edx
@@ -288,7 +294,6 @@ Term
 (Program_Info *info)
 {
     Factor(info);
-    GetChar(info);
     
     while((info->ch != 0) && ((*info->ch == '*') || (*info->ch == '/')))
     {
@@ -302,10 +307,7 @@ Term
         buffer_append_u8(info->buffer, 0x24);
         buffer_append_u8(info->buffer, info->stackCurrent);
         
-        u8 c = *info->ch;
-        GetChar(info);
-        
-        switch(c)
+        switch((u8)(*info->ch))
         {
             case '*':
             {
@@ -322,9 +324,6 @@ Term
                 Assert(!"Unsupported operation.");
             };
         }
-        
-        GetChar(info);
-        
     }
 }
 
@@ -332,6 +331,7 @@ void
 Add
 (Program_Info *info)
 {
+    GetChar(info);
     Term(info);
     
     // mov rcx, qword ptr[rsp + info->stackCurrent
@@ -353,6 +353,7 @@ void
 Sub
 (Program_Info *info)
 {
+    GetChar(info);
     Term(info);
     
     // mov rcx, qword ptr[rsp + info->stackCurrent
@@ -380,7 +381,7 @@ Expression
 (Program_Info *info)
 {
     
-    if(*info->ch == '-')
+    if((info->ch != 0) &&(*info->ch == '-'))
     {
         // xor eax, eax
         buffer_append_u8(info->buffer, 0x31);
@@ -391,7 +392,7 @@ Expression
         Term(info);
     }
     
-    while(info->ch != 0 && ((*info->ch == '+') || (*info->ch == '-')))
+    while((info->ch != 0) && ((*info->ch == '+') || (*info->ch == '-')))
     {
         
         stackPush(info);
@@ -403,10 +404,7 @@ Expression
         buffer_append_u8(info->buffer, 0x24);
         buffer_append_u8(info->buffer, info->stackCurrent);
         
-        u8 c = *info->ch;
-        GetChar(info);
-        
-        switch(c)
+        switch(*info->ch)
         {
             case '+':
             {
@@ -423,6 +421,35 @@ Expression
                 Assert(!"Unsupported operation.");
             };
         }
+    }
+}
+
+void
+Assignment
+(Program_Info *info)
+{
+    Variable *var = 0;
+    if((isAlpha(*info->ch)) && ((info->ch + 1) != info->chMax) && (*(info->ch + 1) == '='))
+    {
+        var = GetVariable(info, (*info->ch));
+        GetChar(info);
+        GetChar(info); // eating the equal sign
+    }
+    
+    Expression(info);
+    
+    if(var != 0)
+    {
+        // mov qword ptr[rsp + imm8], rax
+        buffer_append_u8(info->buffer, 0x48);
+        buffer_append_u8(info->buffer, 0x89);
+        buffer_append_u8(info->buffer, 0x44);
+        buffer_append_u8(info->buffer, 0x24);
+        buffer_append_u8(info->buffer, 0xcc);
+        
+        Patch *patch = (Patch *)buffer_allocate(info->patches, sizeof(Patch));
+        *patch = create_patch(info->buffer, sizeof(u8));
+        patch->var = var;
     }
 }
 
@@ -490,7 +517,13 @@ compile
     *(s8 *)je_patch.location = (s8)(end_loop - conditional_jump);
     *(s8 *)jmp_patch.location = (s8)(start_loop - end_loop);
     
-    Expression(info);
+    Assignment(info);
+    
+    GetChar(info);
+    if((info->ch != 0) && ((*info->ch != '\r') || (*info->ch != '\n')))
+    {
+        Assert(!"End of line expected.");
+    }
     
     Variable *var = (Variable *)info->vars->memory;
     for(u8 i = 0; i < info->varCount; i++)
@@ -618,6 +651,14 @@ WinMainCRTStartup
         test(&buffer_functions, &buffer_vars, &buffer_patches, src, 0);
         clear_buffer(&buffer_strings);
     }
+    
+    
+    {
+        String src = create_string(&buffer_strings, "a=1+2");
+        test(&buffer_functions, &buffer_vars, &buffer_patches, src, 3);
+        clear_buffer(&buffer_strings);
+    }
+    
     
     return(0);
 }
