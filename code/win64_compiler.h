@@ -101,8 +101,8 @@ define_buffer_append(u64)
 #undef define_buffer_append
 
 typedef void (*fn_void_to_void)();
-typedef u32 (*fn_void_to_u32)();
-typedef s32 (*fn_void_to_s32)();
+typedef u32 (*fn_void_to_u64)();
+typedef s32 (*fn_void_to_s64)();
 
 struct String
 {

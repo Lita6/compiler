@@ -1,6 +1,6 @@
 #include <windows.h>
 
-#include "win32_compiler.h"
+#include "win64_compiler.h"
 
 struct Variable
 {
@@ -42,7 +42,7 @@ void
 stackPush
 (Program_Info *info)
 {
-    info->stackCurrent += sizeof(u32);
+    info->stackCurrent += sizeof(u64);
     
     if(info->stackCurrent > info->stackDynMax)
     {
@@ -64,7 +64,7 @@ stackPop
         Assert(!"Push and pop mismatch.");
     }
     
-    info->stackCurrent -= sizeof(u32);
+    info->stackCurrent -= sizeof(u64);
 }
 
 b32
@@ -109,65 +109,120 @@ GetChar
     }
 }
 
-void Expression(Program_Info *info);
+Variable *
+GetVariable
+(Program_Info *info, u8 name)
+{
+    Variable *result = 0;
+    if(info->varCount > 0)
+    {
+        Variable *end = (Variable *)(info->vars->memory + (info->varCount * sizeof(Variable)));
+        for(Variable *search = (Variable *)info->vars->memory; search < end; search++)
+        {
+            if(search->name == name)
+            {
+                result = search;
+                break;
+            }
+        }
+    }
+    
+    if(result == 0)
+    {
+        result = (Variable *)buffer_allocate(info->vars, sizeof(Variable));
+        result->name = name;
+        info->varCount++;
+    }
+    
+    return(result);
+}
 
 void
-Factor
+Ident
 (Program_Info *info)
 {
-    if(*info->ch == '(')
+    u8 name = *info->ch;
+    GetChar(info);
+    
+    if((info->ch != 0) && (*info->ch == '('))
     {
         GetChar(info);
-        Expression(info);
-        
-        if(*info->ch != ')')
+        if((info->ch != 0) && (*info->ch == ')'))
+        {
+            Assert(!"Not accepting function calls at the moment.");
+            
+            /*
+                        Variable *var = GetVariable(info, name);
+                        
+                        // mov rax, qword ptr[rsp + imm8]
+                        buffer_append_u8(info->buffer, 0x48);
+                        buffer_append_u8(info->buffer, 0x8b);
+                        buffer_append_u8(info->buffer, 0x44);
+                        buffer_append_u8(info->buffer, 0x24);
+                        buffer_append_u8(info->buffer, 0xcc);
+                        
+                        Patch *patch = (Patch *)buffer_allocate(info->patches, sizeof(Patch));
+                        *patch = create_patch(info->buffer, sizeof(u8));
+                        patch->var = var;
+                        
+                        // call rax
+                        buffer_append_u8(info->buffer, 0xff);
+                        buffer_append_u8(info->buffer, 0xd0);
+            */
+        }
+        else
         {
             Assert(!"Closing parenthesis expected.");
         }
     }
     else
     {
-        if(isDigit(*info->ch))
+        Variable *var = GetVariable(info, name);
+        
+        // mov rax, qword ptr[rsp + imm8]
+        buffer_append_u8(info->buffer, 0x48);
+        buffer_append_u8(info->buffer, 0x8b);
+        buffer_append_u8(info->buffer, 0x44);
+        buffer_append_u8(info->buffer, 0x24);
+        buffer_append_u8(info->buffer, 0xcc);
+        
+        Patch *patch = (Patch *)buffer_allocate(info->patches, sizeof(Patch));
+        *patch = create_patch(info->buffer, sizeof(u8));
+        patch->var = var;
+    }
+}
+
+void Expression(Program_Info *info);
+
+void
+Factor
+(Program_Info *info)
+{
+    if((info->ch != 0) && (*info->ch == '('))
+    {
+        GetChar(info);
+        Expression(info);
+        
+        if((info->ch == 0) || (*info->ch != ')'))
         {
-            u32 num = 0;
-            num = (u32)((s32)(*info->ch) - '0');
-            
-            // mov eax, imm32
-            buffer_append_u8(info->buffer, 0xb8);
-            buffer_append_u32(info->buffer, num);
+            Assert(!"Closing parenthesis expected.");
         }
-        else if(isAlpha(*info->ch))
+    }
+    else
+    {
+        if((info->ch != 0) && (isDigit(*info->ch)))
         {
-            Variable *var = 0;
-            if(info->varCount > 0)
-            {
-                Variable *end = (Variable *)(info->vars->memory + (info->varCount * sizeof(Variable)));
-                for(Variable *search = (Variable *)info->vars->memory; search < end; search++)
-                {
-                    if(search->name == *info->ch)
-                    {
-                        var = search;
-                        break;
-                    }
-                }
-            }
+            u64 num = 0;
+            num = (u64)((s64)(*info->ch) - '0');
             
-            if(var == 0)
-            {
-                var = (Variable *)buffer_allocate(info->vars, sizeof(Variable));
-                var->name = *info->ch;
-                info->varCount++;
-            }
-            
-            //mov eax, dword ptr[rsp + imm8]
-            buffer_append_u8(info->buffer, 0x8b);
-            buffer_append_u8(info->buffer, 0x44);
-            buffer_append_u8(info->buffer, 0x24);
-            buffer_append_u8(info->buffer, 0xcc);
-            
-            Patch *patch = (Patch *)buffer_allocate(info->patches, sizeof(Patch));
-            *patch = create_patch(info->buffer, sizeof(u8));
-            patch->var = var;
+            // mov rax, imm64
+            buffer_append_u8(info->buffer, 0x48);
+            buffer_append_u8(info->buffer, 0xb8);
+            buffer_append_u64(info->buffer, num);
+        }
+        else if((info->ch != 0) && (isAlpha(*info->ch)))
+        {
+            Ident(info);
         }
         else
         {
@@ -182,7 +237,8 @@ Multiply
 {
     Factor(info);
     
-    // mov ecx, dword ptr[rsp + info->stackCurrent]
+    // mov rcx, qword ptr[rsp + info->stackCurrent]
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0x8b);
     buffer_append_u8(info->buffer, 0x4c);
     buffer_append_u8(info->buffer, 0x24);
@@ -190,7 +246,8 @@ Multiply
     
     stackPop(info);
     
-    // imul eax, ecx
+    // imul rax, rcx
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0x0f);
     buffer_append_u8(info->buffer, 0xaf);
     buffer_append_u8(info->buffer, 0xc1);
@@ -206,11 +263,13 @@ Divide
     buffer_append_u8(info->buffer, 0x31);
     buffer_append_u8(info->buffer, 0xd2);
     
-    // mov ecx, eax
+    // mov rcx, rax
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0x89);
     buffer_append_u8(info->buffer, 0xc1);
     
-    // mov eax, dword ptr[rsp + info->stackCurrent
+    // mov rax, qword ptr[rsp + info->stackCurrent
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0x8b);
     buffer_append_u8(info->buffer, 0x44);
     buffer_append_u8(info->buffer, 0x24);
@@ -218,7 +277,8 @@ Divide
     
     stackPop(info);
     
-    // idiv ecx
+    // idiv rcx
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0xf7);
     buffer_append_u8(info->buffer, 0xf9);
 }
@@ -230,12 +290,13 @@ Term
     Factor(info);
     GetChar(info);
     
-    while(info->ch != 0 && ((*info->ch == '*') || (*info->ch == '/')))
+    while((info->ch != 0) && ((*info->ch == '*') || (*info->ch == '/')))
     {
         
         stackPush(info);
         
-        // mov dword ptr[rsp + info->stackCurrent], eax
+        // mov qword ptr[rsp + info->stackCurrent], rax
+        buffer_append_u8(info->buffer, 0x48);
         buffer_append_u8(info->buffer, 0x89);
         buffer_append_u8(info->buffer, 0x44);
         buffer_append_u8(info->buffer, 0x24);
@@ -273,7 +334,8 @@ Add
 {
     Term(info);
     
-    // mov ecx, dword ptr[rsp + info->stackCurrent
+    // mov rcx, qword ptr[rsp + info->stackCurrent
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0x8b);
     buffer_append_u8(info->buffer, 0x4c);
     buffer_append_u8(info->buffer, 0x24);
@@ -281,7 +343,8 @@ Add
     
     stackPop(info);
     
-    // add eax, ecx
+    // add rax, rcx
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0x01);
     buffer_append_u8(info->buffer, 0xc8);
 }
@@ -292,7 +355,8 @@ Sub
 {
     Term(info);
     
-    // mov ecx, dword ptr[rsp + info->stackCurrent
+    // mov rcx, qword ptr[rsp + info->stackCurrent
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0x8b);
     buffer_append_u8(info->buffer, 0x4c);
     buffer_append_u8(info->buffer, 0x24);
@@ -300,11 +364,13 @@ Sub
     
     stackPop(info);
     
-    // sub eax, ecx
+    // sub rax, rcx
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0x29);
     buffer_append_u8(info->buffer, 0xc8);
     
     // neg eax
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0xf7);
     buffer_append_u8(info->buffer, 0xd8);
 }
@@ -330,7 +396,8 @@ Expression
         
         stackPush(info);
         
-        // mov dword ptr[rsp + info->stackCurrent], eax
+        // mov qword ptr[rsp + info->stackCurrent], rax
+        buffer_append_u8(info->buffer, 0x48);
         buffer_append_u8(info->buffer, 0x89);
         buffer_append_u8(info->buffer, 0x44);
         buffer_append_u8(info->buffer, 0x24);
@@ -364,7 +431,7 @@ compile
 (Program_Info *info)
 {
     // Don't overwrite your return address!
-    u8 stack_alignment = sizeof(u32);
+    u8 stack_alignment = sizeof(u64);
     
     // mov rax, rsp
     buffer_append_u8(info->buffer, 0x48);
@@ -402,16 +469,17 @@ compile
     Patch je_patch = create_patch(info->buffer, sizeof(u8));
     u8 *conditional_jump = info->buffer->end;
     
-    // mov dword ptr[rax], 0x00
+    // mov qword ptr[rax], 0x00
+    buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0xc7);
     buffer_append_u8(info->buffer, 0x00);
-    buffer_append_u32(info->buffer, (u32)0);
+    buffer_append_u32(info->buffer, (u32)0); // sign extended to 64 bits
     
     // sub rax, imm8
     buffer_append_u8(info->buffer, 0x48);
     buffer_append_u8(info->buffer, 0x83);
     buffer_append_u8(info->buffer, 0xe8);
-    buffer_append_u8(info->buffer, sizeof(u32));
+    buffer_append_u8(info->buffer, sizeof(u64));
     
     // jmp start_loop
     buffer_append_u8(info->buffer, 0xeb);
@@ -427,7 +495,7 @@ compile
     Variable *var = (Variable *)info->vars->memory;
     for(u8 i = 0; i < info->varCount; i++)
     {
-        var[i].offset = ((i+1) * sizeof(u32)) + info->stackDynMax;
+        var[i].offset = ((i+1) * sizeof(u64)) + info->stackDynMax;
     }
     
     for(Patch *patch = (Patch *)info->patches->memory; patch < (Patch *)info->patches->end; patch++)
@@ -436,7 +504,7 @@ compile
     }
     
     
-    s16 stack_total = (s16)(info->stackDynMax + info->varCount * sizeof(u32) + stack_alignment);
+    s16 stack_total = (s16)(info->stackDynMax + info->varCount * sizeof(u64) + stack_alignment);
     Assert((stack_total > 0) && (stack_total <= MAX_U8));
     
     *start_patch.location = (u8)stack_total;
@@ -454,7 +522,7 @@ compile
 
 void
 test
-(Buffer *functions, Buffer *vars, Buffer *patches, String src, s32 expected)
+(Buffer *functions, Buffer *vars, Buffer *patches, String src, s64 expected)
 {
     
     Program_Info info = {};
@@ -465,8 +533,8 @@ test
     info.patches = patches;
     
     compile(&info);
-    fn_void_to_s32 program = (fn_void_to_s32)functions->memory;
-    s32 result = program();
+    fn_void_to_s64 program = (fn_void_to_s64)functions->memory;
+    s64 result = program();
     Assert(result == expected);
     
     clear_buffer(functions);
@@ -527,14 +595,14 @@ WinMainCRTStartup
     
     {
         String src = create_string(&buffer_strings, "1+2*3*4+5/6-7-8-9");
-        s32 expected = 1+2*3*4+5/6-7-8-9;
+        s64 expected = 1+2*3*4+5/6-7-8-9;
         test(&buffer_functions, &buffer_vars, &buffer_patches, src, expected);
         clear_buffer(&buffer_strings);
     }
     
     {
         String src = create_string(&buffer_strings, "1+2*(3+4)-5*(6-7*(8*9))");
-        s32 expected = 1+2*(3+4)-5*(6-7*(8*9));
+        s64 expected = 1+2*(3+4)-5*(6-7*(8*9));
         test(&buffer_functions, &buffer_vars, &buffer_patches, src, expected);
         clear_buffer(&buffer_strings);
     }

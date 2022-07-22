@@ -1,3 +1,3 @@
 @echo off
 
-START devenv ..\build\win32_compiler.sln
+START devenv ..\build\win64_compiler.sln
