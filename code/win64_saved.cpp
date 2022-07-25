@@ -4,9 +4,8 @@
 
 struct Variable
 {
-    String name;
+    u8 name;
     u8 offset;
-    b32 isNum;
 };
 
 struct Patch
@@ -110,61 +109,20 @@ isDigit
     return(Result);
 }
 
-b32
-isAlphaNum
-(u8 ch)
-{
-    b32 result = isAlpha(ch) | isDigit(ch);
-    return(result);
-}
-
-s64
-ConvertStringToS64
-(String str)
-{
-    
-    s64 result = 0;
-    for(u32 i = 0; i < str.len; i++)
-    {
-        result = result * 10;
-        result += (s64)(str.chars[i] - '0');
-    }
-    
-    return(result);
-}
-
 Variable *
-FindVariable
-(Program_Info *info, Variable variable)
+GetVariable
+(Program_Info *info, u8 name)
 {
-    if(variable.isNum == 1)
-    {
-        Assert(!"Cannot use an integer as a variable.");
-    }
-    
     Variable *result = 0;
     if(info->varCount > 0)
     {
         Variable *end = (Variable *)(info->vars->memory + (info->varCount * sizeof(Variable)));
         for(Variable *search = (Variable *)info->vars->memory; search < end; search++)
         {
-            if(search->name.len == variable.name.len)
+            if(search->name == name)
             {
-                u8 match = 1;
-                for(u32 i = 0; i < variable.name.len; i++)
-                {
-                    if(search->name.chars[i] != variable.name.chars[i])
-                    {
-                        match = 0;
-                        break;
-                    }
-                }
-                
-                if(match == 1)
-                {
-                    result = search;
-                    break;
-                }
+                result = search;
+                break;
             }
         }
     }
@@ -172,49 +130,19 @@ FindVariable
     if(result == 0)
     {
         result = (Variable *)buffer_allocate(info->vars, sizeof(Variable));
-        result->name = variable.name;
+        result->name = name;
         info->varCount++;
     }
     
     return(result);
 }
 
-Variable
-GetVariable
-(Program_Info *info)
-{        
-    Variable result = {};
-    
-    String variable = {};
-    variable.chars = info->ch;
-    while(isAlphaNum(*info->ch))
-    {
-        variable.len++;
-        GetChar(info);
-        if(info->ch == 0)
-        {
-            break;
-        }
-    }
-    
-    b32 isNum = 1;
-    for(u32 i = 0; i < variable.len; i++)
-    {
-        if(!(isDigit(variable.chars[0])))
-        {
-            isNum = 0;
-        }
-    }
-    
-    result.name = variable;
-    result.isNum = isNum;
-    return(result);
-}
-
 void
 Ident
-(Program_Info *info, Variable name)
+(Program_Info *info)
 {
+    u8 name = *info->ch;
+    GetChar(info);
     
     if((info->ch != 0) && (*info->ch == '('))
     {
@@ -225,7 +153,7 @@ Ident
             Assert(!"Not accepting function calls at the moment.");
             
             /*
-                        Variable *var = FindVariable(info, name);
+                        Variable *var = GetVariable(info, name);
                         
                         // mov rax, qword ptr[rsp + imm8]
                         buffer_append_u8(info->buffer, 0x48);
@@ -250,7 +178,7 @@ Ident
     }
     else
     {
-        Variable *var = FindVariable(info, name);
+        Variable *var = GetVariable(info, name);
         
         // mov rax, qword ptr[rsp + imm8]
         buffer_append_u8(info->buffer, 0x48);
@@ -284,25 +212,25 @@ Factor
     }
     else
     {
-        
-        Variable variable = GetVariable(info);
-        
-        if(variable.isNum == 1)
+        if((info->ch != 0) && (isDigit(*info->ch)))
         {
-            u64 num = (u64)ConvertStringToS64(variable.name);
+            u64 num = 0;
+            num = (u64)((s64)(*info->ch) - '0');
             
             // mov rax, imm64
             buffer_append_u8(info->buffer, 0x48);
             buffer_append_u8(info->buffer, 0xb8);
             buffer_append_u64(info->buffer, num);
+            
+            GetChar(info);
         }
-        else if((info->ch != 0) && (variable.name.len == 0))
+        else if((info->ch != 0) && (isAlpha(*info->ch)))
         {
-            Assert(!"This character is not accepted at this time.");
+            Ident(info);
         }
         else
         {
-            Ident(info, variable);
+            Assert(!"This character is not accepted at this time.");
         }
     }
 }
@@ -500,22 +428,12 @@ void
 Assignment
 (Program_Info *info)
 {
-    
     Variable *var = 0;
-    for(u8 *ch = info->ch; ch < info->chMax; ch++)
+    if((isAlpha(*info->ch)) && ((info->ch + 1) != info->chMax) && (*(info->ch + 1) == '='))
     {
-        if(*ch == '=')
-        {
-            Variable variable = GetVariable(info);
-            GetChar(info); // eat the equal sign
-            if(variable.isNum == 1)
-            {
-                Assert(!"Cannot assign a value to an integer.");
-            }
-            
-            var = FindVariable(info, variable);
-            break;
-        }
+        var = GetVariable(info, (*info->ch));
+        GetChar(info);
+        GetChar(info); // eating the equal sign
     }
     
     Expression(info);
@@ -635,28 +553,6 @@ compile
     
 }
 
-void
-test
-(Buffer *functions, Buffer *vars, Buffer *patches, String src, s64 expected)
-{
-    
-    Program_Info info = {};
-    info.buffer = functions;
-    info.ch = src.chars;
-    info.chMax = (src.chars + src.len);
-    info.vars = vars;
-    info.patches = patches;
-    
-    compile(&info);
-    fn_void_to_s64 program = (fn_void_to_s64)functions->memory;
-    s64 result = program();
-    Assert(result == expected);
-    
-    clear_buffer(functions);
-    clear_buffer(vars);
-    clear_buffer(patches);
-}
-
 int __stdcall
 WinMainCRTStartup
 (void)
@@ -672,79 +568,22 @@ WinMainCRTStartup
     Buffer buffer_patches = create_buffer(PAGE, PAGE_READWRITE);
     Buffer buffer_functions = create_buffer(PAGE, PAGE_EXECUTE_READWRITE);
     
-    {
-        String src = create_string(&buffer_strings, "5");
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, 5);
-        clear_buffer(&buffer_strings);
-    }
+    String src = create_string(&buffer_strings, "5");
     
-    {
-        String src = create_string(&buffer_strings, "4+7");
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, 11);
-        clear_buffer(&buffer_strings);
-    }
+    Program_Info info = {};
+    info.buffer = &buffer_functions;
+    info.ch = src.chars;
+    info.chMax = (src.chars + src.len);
+    info.vars = &buffer_vars;
+    info.patches = &buffer_patches;
     
-    {
-        String src = create_string(&buffer_strings, "2-4");
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, -2);
-        clear_buffer(&buffer_strings);
-    }
+    compile(&info);
+    fn_void_to_s64 program = (fn_void_to_s64)buffer_functions->memory;
+    s64 result = program();
+    Assert(result == expected);
     
-    {
-        String src = create_string(&buffer_strings, "7+8-9");
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, 6);
-        clear_buffer(&buffer_strings);
-    }
-    
-    {
-        String src = create_string(&buffer_strings, "2+3*4");
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, 14);
-        clear_buffer(&buffer_strings);
-    }
-    
-    {
-        String src = create_string(&buffer_strings, "9/3");
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, 3);
-        clear_buffer(&buffer_strings);
-    }
-    
-    {
-        String src = create_string(&buffer_strings, "1+2*3*4+5/6-7-8-9");
-        s64 expected = 1+2*3*4+5/6-7-8-9;
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, expected);
-        clear_buffer(&buffer_strings);
-    }
-    
-    {
-        String src = create_string(&buffer_strings, "1+2*(3+4)-5*(6-7*(8*9))");
-        s64 expected = 1+2*(3+4)-5*(6-7*(8*9));
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, expected);
-        clear_buffer(&buffer_strings);
-    }
-    
-    {
-        String src = create_string(&buffer_strings, "-8");
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, -8);
-        clear_buffer(&buffer_strings);
-    }
-    
-    {
-        String src = create_string(&buffer_strings, "a+b");
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, 0);
-        clear_buffer(&buffer_strings);
-    }
-    
-    {
-        String src = create_string(&buffer_strings, "a=1+2");
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, 3);
-        clear_buffer(&buffer_strings);
-    }
-    
-    {
-        String src = create_string(&buffer_strings, "alpha=105+2000");
-        test(&buffer_functions, &buffer_vars, &buffer_patches, src, 2105);
-        clear_buffer(&buffer_strings);
-    }
-    
-    return(0);
+    clear_buffer(&buffer_functions);
+    clear_buffer(&buffer_vars);
+    clear_buffer(&buffer_patches);
+    clear_buffer(&buffer_strings);
 }
