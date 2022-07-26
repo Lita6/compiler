@@ -23,12 +23,6 @@ begin
    Abort(s + ' Expected');
 end;
 
-procedure Match(x: char);
-begin
-   if Look = x then GetChar
-   else Expected('''' + x + '''');
-end;
-
 function IsAlpha(c: char): boolean;
 begin
    IsAlpha := upcase(c) in ['A'..'Z'];
@@ -49,6 +43,26 @@ begin
    IsAddop := c in ['+', '-'];
 end;
 
+function IsWhite(c: char): boolean;
+begin
+   IsWhite := c in [' ', TAB];
+end;
+
+procedure SkipWhite;
+begin
+   while IsWhite(Look) do
+      GetChar;
+end;
+
+procedure Match(x: char);
+begin
+   if Look <> x then Expected('''' + x + '''')
+   else begin
+      GetChar;
+      SkipWhite;
+   end;
+end;
+
 function GetName: string;
 var Token: string;
 begin
@@ -59,13 +73,20 @@ begin
       GetChar;
    end;
    GetName := Token;
+   SkipWhite;
 end;
 
-function GetNum: char;
+function GetNum: string;
+var Value: string;
 begin
+   Value := '';
    if not IsDigit(Look) then Expected('Integer');
-   GetNum := Look;
-   GetChar;
+   while IsDigit(Look) do begin
+      Value := Value + Look;
+      GetChar;
+   end;
+   GetNum := Value;
+   SkipWhite;
 end;
 
 procedure Emit(s: string);
@@ -79,22 +100,17 @@ begin
    WriteLn;
 end;
 
-procedure Init;
-begin
-   GetChar;
-end;
-
 procedure Ident;
-var Name: char;
+var Name: string[8];
 begin
-   Name := GetName;
+   Name:= GetName;
    if Look = '(' then begin
       Match('(');
       Match(')');
       EmitLn('BSR ' + Name);
       end
    else
-      EmitLn('MOVE ' + Name + '(PC),D0')
+      EmitLn('MOVE ' + Name + '(PC),D0');
 end;
 
 procedure Expression; Forward;
@@ -135,7 +151,6 @@ begin
       case Look of
        '*': Multiply;
        '/': Divide;
-      else Expected('Mulop');
       end;
    end;
 end;
@@ -165,7 +180,6 @@ begin
       case Look of
        '+': Add;
        '-': Subtract;
-      else Expected('Addop');
       end;
    end;
 end;
@@ -178,6 +192,12 @@ begin
    Expression;
    EmitLn('LEA ' + Name + '(PC),A0');
    EmitLn('MOVE D0,(A0)')
+end;
+
+procedure Init;
+begin
+   GetChar;
+   SkipWhite;
 end;
 
 { Main Program }

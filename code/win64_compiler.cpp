@@ -72,15 +72,22 @@ void
 GetChar
 (Program_Info *info)
 {
-    
-    if(info->ch != 0)
+    do
     {    
-        info->ch++;
-        if(info->ch >= info->chMax)
-        {
-            info->ch = 0;
+        if(info->ch != 0)
+        {    
+            info->ch++;
+            if(info->ch >= info->chMax)
+            {
+                info->ch = 0;
+                break;
+            }
         }
-    }
+        else
+        {
+            break;
+        }
+    }while((*info->ch == ' ') || (*info->ch == '\t'));
 }
 
 b32
@@ -203,6 +210,7 @@ GetVariable
         if(!(isDigit(variable.chars[0])))
         {
             isNum = 0;
+            break;
         }
     }
     
@@ -743,6 +751,12 @@ WinMainCRTStartup
     {
         String src = create_string(&buffer_strings, "alpha=105+2000");
         test(&buffer_functions, &buffer_vars, &buffer_patches, src, 2105);
+        clear_buffer(&buffer_strings);
+    }
+    
+    {
+        String src = create_string(&buffer_strings, "alpha = 50 + 99");
+        test(&buffer_functions, &buffer_vars, &buffer_patches, src, 149);
         clear_buffer(&buffer_strings);
     }
     
