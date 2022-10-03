@@ -5,5 +5,5 @@ set PATH=d:\programming\github\compiler\cmds;%PATH%
 
 cd code
 call 4coder
-call vs
+call rdbg
 cls

@@ -152,24 +152,24 @@ Ident
             GetChar(info);
             Assert(!"Not accepting function calls at the moment.");
             
-            /*
-                        Variable *var = GetVariable(info, name);
-                        
-                        // mov rax, qword ptr[rsp + imm8]
-                        buffer_append_u8(info->buffer, 0x48);
-                        buffer_append_u8(info->buffer, 0x8b);
-                        buffer_append_u8(info->buffer, 0x44);
-                        buffer_append_u8(info->buffer, 0x24);
-                        buffer_append_u8(info->buffer, 0xcc);
-                        
-                        Patch *patch = (Patch *)buffer_allocate(info->patches, sizeof(Patch));
-                        *patch = create_patch(info->buffer, sizeof(u8));
-                        patch->var = var;
-                        
-                        // call rax
-                        buffer_append_u8(info->buffer, 0xff);
-                        buffer_append_u8(info->buffer, 0xd0);
-            */
+#if 0
+            Variable *var = GetVariable(info, name);
+            
+            // mov rax, qword ptr[rsp + imm8]
+            buffer_append_u8(info->buffer, 0x48);
+            buffer_append_u8(info->buffer, 0x8b);
+            buffer_append_u8(info->buffer, 0x44);
+            buffer_append_u8(info->buffer, 0x24);
+            buffer_append_u8(info->buffer, 0xcc);
+            
+            Patch *patch = (Patch *)buffer_allocate(info->patches, sizeof(Patch));
+            *patch = create_patch(info->buffer, sizeof(u8));
+            patch->var = var;
+            
+            // call rax
+            buffer_append_u8(info->buffer, 0xff);
+            buffer_append_u8(info->buffer, 0xd0);
+#endif
         }
         else
         {

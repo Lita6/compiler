@@ -128,58 +128,6 @@ create_string
     return(result);
 }
 
-b32
-isAlpha
-(u8 ch)
-{
-    b32 Result = 0;
-    if(((ch >= 'A') && (ch <= 'Z')) ||
-       ((ch >= 'a') && (ch <= 'z')))
-    {
-        Result = 1;
-    }
-    
-    return(Result);
-}
-
-b32
-isDigit
-(u8 ch)
-{
-    b32 Result = 0;
-    if((ch >= '0') && (ch <= '9'))
-    {
-        Result = 1;
-    }
-    
-    return(Result);
-}
-
-b32
-isAlphaNum
-(u8 ch)
-{
-    b32 result = 0;
-    if((isDigit(ch) == 1) || (isAlpha(ch) == 1))
-    {
-        result = 1;
-    }
-    return(result);
-}
-
-s64
-StringToS64
-(String name)
-{
-    
-    s64 result = 0;
-    for(u32 i = 0; i < name.len; i++)
-    {
-        result = (10 * result) + (name.chars[i] - '0');
-    }
-    return(result);
-}
-
 inline u32
 SafeTruncateU64toU32(u64 Value)
 {

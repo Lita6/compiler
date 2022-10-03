@@ -1,3 +1,160 @@
+
+var Look: char;
+    Lcount: integer;
+
+procedure GetChar;
+begin
+   Read(Look);
+end;
+
+procedure Error(s: string);
+begin
+   WriteLn;
+   WriteLn(^G, 'Error: ', s, '.');
+end;
+
+procedure Abort(s: string);
+begin
+   Error(s);
+   Halt;
+end;
+
+procedure Expected(s: string);
+begin
+   Abort(s + ' Expected');
+end;
+
+procedure Match(x: char);
+begin
+   if Look = x then GetChar
+   else Expected('''' + x + '''');
+end;
+
+function IsAlpha(c: char): boolean;
+begin
+   IsAlpha := upcase(c) in ['A'..'Z'];
+end;
+
+function IsDigit(c: char): boolean;
+begin
+   IsDigit := c in ['0'..'9'];
+end;
+
+function GetName: char;
+begin
+   if not IsAlpha(Look) then Expected('Name');
+   GetName := UpCase(Look);
+   GetChar;
+end;
+
+function GetNum: char;
+begin
+   if not IsDigit(Look) then Expected('Integer');
+   GetNum := Look;
+   GetChar;
+end;
+
+procedure Emit(s: string);
+begin
+   Write(TAB, s);
+end;
+
+procedure EmitLn(s: string);
+begin
+   Emit(s);
+   WriteLn;
+end;
+
+function NewLabel: string;
+var S: string;
+begin
+   Str(LCount, S);
+   NewLabel := 'L' + S;
+   Inc(LCount);
+end;
+
+procedure PostLabel(L: string);
+begin
+   WriteLn(L, ':');
+end;
+
+procedure Init;
+begin
+   GetChar;
+   LCount := 0;
+end;
+
+procedure Other;
+begin
+   EmitLn(GetName);
+end;
+
+Procedure Condition;
+begin
+   EmitLn('<condition>');
+end;
+
+procedure Block; Forward;
+
+procedure DoIf;
+var L1, L2: string;
+begin
+   Match('i');
+   Condition;
+   L1 := NewLabel;
+   L2 := L1;
+   EmitLn('BEQ ' + L1);
+   Block;
+   if Look = 'l' then begin
+      Match('l');
+      L2 := NewLabel;
+      EmitLn('BRA ' + L2);
+      PostLabel(L1);
+      Block;
+   end;
+   Match('e');
+   PostLabel(L2);
+end;
+
+procedure DoWhile;
+var L1, L2: string;
+begin
+   Match('w');
+   L1 := NewLabel;
+   L2 := NewLabel;
+   PostLabel(L1);
+   Condition;
+   EmitLn('BEQ ' + L2);
+   Block;
+   Match('e');
+   EmitLn('BRA ' + L1);
+   PostLabel(L2);
+end;
+
+procedure Block;
+begin
+   while not(Look in ['e', 'l']) do begin
+      case Look of
+       'i': DoIf;
+       'w': DoWhile;
+       else Other;
+      end;
+   end;
+end;
+
+procedure DoProgram;
+begin
+   Block;
+   if Look <> 'e' then Expected('End');
+   EmitLn('END')
+end;
+
+{ Main Program }
+begin
+   Init;
+   DoProgram;
+end.
+
 **
 ** SAVED - Interpreter
 **
@@ -656,4 +813,3 @@ end;
 begin
    Init;
 end.
-
