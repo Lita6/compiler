@@ -29,6 +29,28 @@ struct Token_List
     u32 count;
 };
 
+void
+inc_token
+(Buffer *buffer, Token **token, Token_List *list, u8 *chars)
+{
+    
+    *token = (Token *)buffer_allocate(buffer, sizeof(Token));
+    list->count++;
+    (*token)->string.chars = chars;
+}
+
+b32
+isWhiteSpace
+(u8 ch)
+{
+    b32 result = 0;
+    if((ch == ' ') || (ch == '\t'))
+    {
+        result = 1;
+    }
+    return(result);
+}
+
 Token_List
 lex
 (Buffer *buffer, String line)
@@ -38,9 +60,9 @@ lex
     Token *current_token = 0;
     for(u32 i = 0; i < line.len; i++)
     {
-        if((line.chars[i] == ' ') || (line.chars[i] == '\t'))
+        if(isWhiteSpace(line.chars[i]))
         {
-            while((line.chars[i] == ' ') || (line.chars[i] == '\t'))
+            while(isWhiteSpace(line.chars[i]))
             {
                 i++;
             }
@@ -50,23 +72,49 @@ lex
                 break;
             }
             
-            current_token = (Token *)buffer_allocate(buffer, sizeof(Token));
-            result.count++;
-            current_token->string.chars = &line.chars[i];
+            current_token = 0;
         }
         
-        if(current_token == 0)
+        if(line.chars[i] == '{')
         {
-            current_token = (Token *)buffer_allocate(buffer, sizeof(Token));
-            result.count++;
+            inc_token(buffer, &current_token, &result, &line.chars[i]);
+            current_token->type = Token_Type_Open_Brace;
         }
-        
-        if(current_token->string.chars == 0)
+        else if(line.chars[i] == '}')
         {
-            current_token->string.chars = &line.chars[i];
+            inc_token(buffer, &current_token, &result, &line.chars[i]);
+            current_token->type = Token_Type_Close_Brace;
         }
-        
+        else if(line.chars[i] == '(')
+        {
+            inc_token(buffer, &current_token, &result, &line.chars[i]);
+            current_token->type = Token_Type_Open_Parenthesis;
+        }
+        else if(line.chars[i] == ')')
+        {
+            inc_token(buffer, &current_token, &result, &line.chars[i]);
+            current_token->type = Token_Type_Close_Parenthesis;
+        }
+        else if(line.chars[i] == ';')
+        {
+            inc_token(buffer, &current_token, &result, &line.chars[i]);
+            current_token->type = Token_Type_Semicolon;
+        }
+        else if(current_token == 0)
+        {
+            inc_token(buffer, &current_token, &result, &line.chars[i]);
+        }
         current_token->string.len++;
+    }
+    
+    if(current_token != 0)
+    {
+        buffer->end -= (sizeof(Token));
+        result.count--;
+        current_token->string.chars = 0;
+        current_token->string.len = 0;
+        current_token->type = Token_Type_None;
+        current_token = 0;
     }
     
     return(result);
@@ -122,6 +170,8 @@ WinMainCRTStartup
         for(u32 i = 0; i < line_count; i++)
         {
             Token_List tokens = lex(&buffer_tokens, line[i]);
+            int a = 0;
+            (void)a;
         }
         
         clear_buffer(&buffer_strings);
