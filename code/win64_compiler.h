@@ -128,25 +128,6 @@ create_string
     return(result);
 }
 
-String
-Split_String
-(String string, u8 delimiter)
-{
-    String result = {};
-    result.chars = string.chars;
-    
-    for(u32 i = 0; i < string.len; i++)
-    {
-        if(string.chars[i] == delimiter)
-        {
-            break;
-        }
-        result.len++;
-    }
-    
-    return(result);
-}
-
 b32
 isAlpha
 (u8 ch)
