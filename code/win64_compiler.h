@@ -33,6 +33,9 @@ typedef double r64;
 
 #define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
 
+#include "win64_buffer.h"
+#include "win64_string.h"
+
 #define Kilobytes(Value) ((Value)*1024LL)
 #define Megabytes(Value) (Kilobytes(Value)*1024LL)
 #define Gigabytes(Value) (Megabytes(Value)*1024LL)
@@ -40,145 +43,9 @@ typedef double r64;
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
-struct Buffer
-{
-    u8 *memory;
-    u8 *end;
-    u32 size;
-};
-
-Buffer
-create_buffer
-(u32 size, s32 permission)
-{
-    Buffer buffer = {};
-    buffer.memory = (u8 *)(VirtualAlloc(0, (SIZE_T)size, MEM_COMMIT | MEM_RESERVE, (DWORD)permission));
-    Assert(buffer.memory);
-    buffer.end = buffer.memory;
-    buffer.size = size;
-    
-    return(buffer);
-}
-
-u8 *
-buffer_allocate
-(Buffer *buffer, u32 amount)
-{
-    
-    Assert((buffer->end + amount) <= (buffer->memory + buffer->size));
-    
-    u8 *Result = buffer->end;
-    buffer->end += amount;
-    
-    return(Result);
-}
-
-void
-clear_buffer
-(Buffer *buffer)
-{
-    for(u8 *i = buffer->memory; i < buffer->end; i++)
-    {
-        *i = 0;
-    }
-    buffer->end = buffer->memory;
-}
-
-#define define_buffer_append(Type) \
-inline void \
-buffer_append_##Type \
-(Buffer *buffer, Type value) \
-{ \
-Assert((buffer->end + sizeof(Type)) <= (buffer->memory + buffer->size)); \
-*(Type *)buffer->end = value; \
-buffer->end += sizeof(Type); \
-}
-
-define_buffer_append(u8)
-define_buffer_append(u16)
-define_buffer_append(u32)
-define_buffer_append(u64)
-#undef define_buffer_append
-
 typedef void (*fn_void_to_void)();
 typedef u32 (*fn_void_to_u64)();
-typedef s32 (*fn_void_to_s64)();
-
-struct String
-{
-    u8 *chars;
-    u32 len;
-};
-
-String
-create_string
-(Buffer *buffer, char *str)
-{
-    
-    String result = {};
-    result.chars = buffer->end;
-    
-    u8 *index = (u8 *)str;
-    while(*index)
-    {
-        buffer_append_u8(buffer, *index++);
-        result.len++;
-    }
-    
-    return(result);
-}
-
-b32
-isAlpha
-(u8 ch)
-{
-    b32 Result = 0;
-    if(((ch >= 'A') && (ch <= 'Z')) ||
-       ((ch >= 'a') && (ch <= 'z')))
-    {
-        Result = 1;
-    }
-    
-    return(Result);
-}
-
-b32
-isDigit
-(u8 ch)
-{
-    b32 Result = 0;
-    if((ch >= '0') && (ch <= '9'))
-    {
-        Result = 1;
-    }
-    
-    return(Result);
-}
-
-b32
-isAlphaNum
-(u8 ch)
-{
-    b32 result = 0;
-    if((isDigit(ch) == 1) || (isAlpha(ch) == 1))
-    {
-        result = 1;
-    }
-    return(result);
-}
-
-s64
-StringToS64
-(String name)
-{
-    
-    s64 result = 0;
-    for(u32 i = 0; i < name.len; i++)
-    {
-        result = (10 * result) + (name.chars[i] - '0');
-    }
-    return(result);
-}
+typedef s32 (*fn_void_to_s32)();
 
 inline u32
 SafeTruncateU64toU32(u64 Value)
