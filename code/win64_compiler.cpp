@@ -189,17 +189,6 @@ compile
 (Buffer *buffer_code, Token_List keywords, Function *function, String src)
 {
     
-#if 0    
-    String_List lines = SplitString_List(buffer_lines, src);
-    
-    for(u32 i = 0; i < lines.count; i++)
-    {
-        Token_List tokens = lex(buffer_tokens, keywords, lines.start[i]);
-        int a = 0;
-        (void)a;
-    }
-#endif
-    
     Error result = Error_None;
     
     String current_string = {};
@@ -209,14 +198,29 @@ compile
     {
         Token_Type symbol_type = isSpecialSymbol(src.chars[i]);
         Token_Type string_type = Token_Type_None;
+        b32 isDelimiter = ((symbol_type != Token_Type_None) || isWhiteSpace(src.chars[i]));
         
-        if((symbol_type != Token_Type_None) || isWhiteSpace(src.chars[i]) || (((i + 1) >= src.len) && current_string.chars != 0))
+        if((current_string.chars == 0) && (!isDelimiter))
+        {
+            current_string.chars = &src.chars[i];
+        }
+        
+        if((current_string.chars != 0) && (!isDelimiter))
+        {
+            current_string.len++;
+        }
+        
+        b32 isLastChar = (((i + 1) >= src.len) && current_string.chars != 0);
+        
+        if(isDelimiter || isLastChar)
         {
             
-            if((((i + 1) >= src.len) && current_string.chars != 0) && (symbol_type == Token_Type_None))
+#if 0            
+            if(isLastChar && (!isDelimiter))
             {
                 current_string.len++;
             }
+#endif
             
             if(current_string.chars != 0)
             {
@@ -340,22 +344,13 @@ compile
                 instr = {};
             }
             
-            if((must_find_return_value == 1) && (isEndOfStatement(src.chars[i]) || (((i + 1) >= src.len) && current_string.chars != 0)))
+            if((must_find_return_value == 1) && (isEndOfStatement(src.chars[i]) || isLastChar))
             {
                 result = Error_Return_Value_Required;
                 function = {};
                 break;
             }
             
-        }
-        else if(current_string.chars == 0)
-        {
-            current_string.chars = &src.chars[i];
-        }
-        
-        if(current_string.chars != 0)
-        {
-            current_string.len++;
         }
     }
     
@@ -467,141 +462,281 @@ WinMainCRTStartup
         clear_buffer(&buffer_code);
     }
     
-#if 0
     {
         String src = create_string(&buffer_temp, "return 0;");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 0);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "return 0");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 0);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
+    }
+    
+    {
+        String src = create_string(&buffer_temp, "return 111");
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 111);
+        
+        clear_buffer(&buffer_temp);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "return;");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_Return_Value_Required);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "return");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_Return_Value_Required);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "s32 main(){return 0}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 0);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "s32 main() {\r\nreturn 2;\r\n}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 2);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
+    }
+    
+#if 0
+    
+    {
+        // TODO: Need error for missing return statement of any kind.
+        String src = create_string(&buffer_temp, "s32 main() {\r\n}");
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 2);
+        
+        clear_buffer(&buffer_temp);
+        clear_buffer(&buffer_code);
     }
     
     {
-        String src = create_string(&buffer_temp, "s32 main( {\r\nreturn 2;\r\n}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        // TODO: Need warning for using ret instead of return.
+        String src = create_string(&buffer_temp, "s32 main() {\r\nret\r\n}");
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 2);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
+    }
+    
+    {
+        // TODO: Need error for missing close parenthesis.
+        String src = create_string(&buffer_temp, "s32 main( {\r\nreturn 2;\r\n}");
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 2);
+        
+        clear_buffer(&buffer_temp);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "s32 main() {\r\nreturn;\r\n}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_Return_Value_Required);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
+        // TODO: Need to return error on missing close brace.
         String src = create_string(&buffer_temp, "s32 main() {\r\nreturn 2;");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 2);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "s32 main() {\r\nreturn 2\r\n}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 2);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
+        // TODO: Need error for not returning a value or having a return statement.
         String src = create_string(&buffer_temp, "s32 main() {\r\nreturn2;\r\n}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 0);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
+        // TODO: Need error for not returning a value or having a return statement.
         String src = create_string(&buffer_temp, "s32 main() {\r\nRETURN 2;\r\n}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 0);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "s32 main() {\r\nreturn 100;\r\n}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 100);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
+        // NOTE: I personally like the return statement and value on the same line.
         String src = create_string(&buffer_temp, "\r\ns32\r\nmain\r\n(\r\n)\r\n{\r\nreturn\r\n2\r\n;\r\n}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_Return_Value_Required);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "s32 main(){return 2;}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 0);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "s32 main() {\r\nreturn 0;\r\n}");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 0);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
     
     {
         String src = create_string(&buffer_temp, "   s32   main   (   )   {   \r\nreturn   2   ;\r\n   }");
-        compile(&buffer_lines, &buffer_tokens, keywords, src);
+        Function test_function = {};
+        Error compile_result = compile(&buffer_code, keywords, &test_function, src);
+        
+        Assert(compile_result == Error_None);
+        clear_rax();
+        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
+        Assert(function_result == 0);
         
         clear_buffer(&buffer_temp);
-        clear_buffer(&buffer_tokens);
+        clear_buffer(&buffer_code);
     }
 #endif
     
