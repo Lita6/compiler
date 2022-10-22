@@ -1,11 +1,3 @@
-// TODO: The simplest, but complete programs that my compiler will accept are:
-//       "s32 main(){return 0;}"
-//       "s32 main(){return 0}"
-//       "return 0"
-//       "return 0;"
-//       "mov rax, 0\r\nret"
-//       "ret"
-
 #include <windows.h>
 
 #include "win64_compiler.h"
@@ -67,6 +59,7 @@ enum Error
 {
     Error_None,
     Error_Return_Value_Required,
+    Error_Need_Return_Statement,
 };
 
 void
@@ -193,12 +186,24 @@ compile
     
     String current_string = {};
     b32 must_find_return_value = 0;
+    b32 need_return_statement = 0;
     Instruction instr = {};
     for(u32 i = 0; i < src.len; i++)
     {
         Token_Type symbol_type = isSpecialSymbol(src.chars[i]);
         Token_Type string_type = Token_Type_None;
         b32 isDelimiter = ((symbol_type != Token_Type_None) || isWhiteSpace(src.chars[i]));
+        
+        switch (symbol_type)
+        {
+            case Token_Type_Close_Brace:
+            {
+                if(need_return_statement == 1)
+                {
+                    result = Error_Need_Return_Statement;
+                }
+            }break;
+        };
         
         if((current_string.chars == 0) && (!isDelimiter))
         {
@@ -214,13 +219,6 @@ compile
         
         if(isDelimiter || isLastChar)
         {
-            
-#if 0            
-            if(isLastChar && (!isDelimiter))
-            {
-                current_string.len++;
-            }
-#endif
             
             if(current_string.chars != 0)
             {
@@ -263,13 +261,13 @@ compile
                     case Token_Type_S32_Keyword:
                     {
                         function->ret = Return_Type_S32;
+                        need_return_statement = 1;
                     }break;
                     
                     case Token_Type_Main_Keyword:
                     {
                         function->id.type = string_type;
-                        function->id.string.chars = current_string.chars;
-                        function->id.string.len = current_string.len;
+                        function->id.string = current_string;
                     }break;
                     
                     case Token_Type_Mov_Keyword:
@@ -288,6 +286,7 @@ compile
                         instr.instruction.string = current_string;
                         instr.instruction.type = string_type;
                         must_find_return_value = 1;
+                        need_return_statement = 0;
                     }break;
                     
                     case Token_Type_Ret_Keyword:
@@ -295,6 +294,7 @@ compile
                         instr.instruction.string = current_string;
                         instr.instruction.type = string_type;
                         instr.isComplete = 1;
+                        need_return_statement = 0;
                     }break;
                     
                     default:
@@ -347,10 +347,13 @@ compile
             if((must_find_return_value == 1) && (isEndOfStatement(src.chars[i]) || isLastChar))
             {
                 result = Error_Return_Value_Required;
-                function = {};
-                break;
             }
-            
+        }
+        
+        if(result != Error_None)
+        {
+            *function = {};
+            break;
         }
     }
     
@@ -554,22 +557,19 @@ WinMainCRTStartup
         clear_buffer(&buffer_code);
     }
     
-#if 0
-    
     {
         // TODO: Need error for missing return statement of any kind.
         String src = create_string(&buffer_temp, "s32 main() {\r\n}");
         Function test_function = {};
         Error compile_result = compile(&buffer_code, keywords, &test_function, src);
         
-        Assert(compile_result == Error_None);
-        clear_rax();
-        s32 function_result = ((fn_void_to_s32)test_function.call_function)();
-        Assert(function_result == 2);
+        Assert(compile_result == Error_Need_Return_Statement);
         
         clear_buffer(&buffer_temp);
         clear_buffer(&buffer_code);
     }
+    
+#if 0
     
     {
         // TODO: Need warning for using ret instead of return.
