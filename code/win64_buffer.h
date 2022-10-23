@@ -11,6 +11,16 @@ struct Buffer
 };
 
 Buffer
+buffer(u8 *memory, u8 *end, u32 size)
+{
+    Buffer result = {};
+    result.memory = memory;
+    result.end = end;
+    result.size = size;
+    return(result);
+}
+
+Buffer
 create_buffer
 (u32 size, s32 permission)
 {
