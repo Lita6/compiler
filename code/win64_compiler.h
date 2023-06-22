@@ -291,7 +291,7 @@ void *codeStart = executable.end = executable.memory + 0x200;
 read_file_result sourceCode = win32ReadEntireFile("..\\data\\source.txt");
 u8 *ch = (u8 *)sourceCode.Contents;
 u8 *chMax = (u8 *)sourceCode.Contents + sourceCode.ContentsSize;
-Expression(&executable, ch, chMax);
+Expression(&executable, ch, chMax); // Crenshaw compile
 
 // ret
 buffer_append_u8(&executable, 0xc3);
